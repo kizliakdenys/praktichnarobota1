@@ -1,4 +1,9 @@
-# Welcome to your Expo app 👋
+# TeamQuizApp - Командний квіз 🎓
+
+## Предметна область
+Навчальна мобільна застосунок для проведення командних квізів. Дозволяє користувачам переглядати список доступних тестів, організованих для групової участі, та налаштовувати параметри додатку (темний режим).
+
+---
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
