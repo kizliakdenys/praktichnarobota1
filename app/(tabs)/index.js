@@ -1,105 +1,177 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, Image, Switch, StatusBar, SafeAreaView } from 'react-native';
+import { 
+  StyleSheet, Text, View, TouchableOpacity, FlatList, Image, 
+  Switch, StatusBar, SafeAreaView, Modal, TextInput, Alert 
+} from 'react-native';
 
-// 5. Список з 20+ елементів (Пункт 5 завдання)
-const QUIZ_DATA = Array.from({ length: 25 }, (_, i) => ({
-  id: i.toString(),
+// Початкові дані
+const INITIAL_DATA = Array.from({ length: 5 }, (_, i) => ({
+  id: Date.now().toString() + i,
   title: `Командний квіз №${i + 1}`,
   description: 'Натисніть, щоб розпочати тестування з командою',
+  details: 'Це детальна інформація про квіз. Тут можуть бути правила, кількість питань та час на проходження.',
   image: `https://picsum.photos/200?random=${i}`, 
 }));
 
 export default function App() {
-  // 3. Стан для перемикання екранів (Пункт 3 завдання)
+  // Стани
   const [activeTab, setActiveTab] = useState('list');
-  
-  // 6. Стан для налаштувань теми (Пункт 6 завдання)
+  const [quizzes, setQuizzes] = useState(INITIAL_DATA);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
+  const [showNavMenu, setShowNavMenu] = useState(false); // Для кастомного меню
 
-  // 7. Окремий компонент для елемента списку (Props) (Пункт 7 завдання)
-  const QuizItem = ({ title, desc, img }) => (
-    <View style={[styles.card, isDarkMode ? styles.darkCard : styles.lightCard]}>
-      <Image source={{ uri: img }} style={styles.cardImage} />
+  // Стани для модального вікна деталей
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  // Стани для нового елемента (Екран 3)
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+
+  // Функції
+  const addItem = () => {
+    if (!newTitle.trim()) return Alert.alert("Помилка", "Введіть назву");
+    const newItem = {
+      id: Date.now().toString(),
+      title: newTitle,
+      description: newDesc || 'Без опису',
+      details: 'Додаткова інформація для власного квізу',
+      image: `https://picsum.photos/200?random=${Math.random()}`,
+    };
+    setQuizzes([newItem, ...quizzes]);
+    setNewTitle('');
+    setNewDesc('');
+    setActiveTab('list');
+  };
+
+  const deleteItem = (id) => {
+    setQuizzes(quizzes.filter(item => item.id !== id));
+    setDetailModalVisible(false);
+  };
+
+  // Компонент елемента списку
+  const QuizItem = ({ item }) => (
+    <TouchableOpacity 
+      style={[styles.card, isDarkMode ? styles.darkCard : styles.lightCard]}
+      onPress={() => { setSelectedItem(item); setDetailModalVisible(true); }}
+    >
+      <Image source={{ uri: item.image }} style={styles.cardImage} />
       <View style={styles.cardContent}>
-        <Text style={[styles.cardTitle, { fontSize: 17 * fontSizeMultiplier }, isDarkMode ? styles.darkText : styles.lightText]}>{title}</Text>
-        <Text style={[{ fontSize: 14 * fontSizeMultiplier }, isDarkMode ? styles.darkTextSub : styles.lightTextSub]}>{desc}</Text>
+        <Text style={[styles.cardTitle, { fontSize: 17 * fontSizeMultiplier }, isDarkMode ? styles.darkText : styles.lightText]}>
+          {item.title}
+        </Text>
+        <Text style={[{ fontSize: 14 * fontSizeMultiplier }, isDarkMode ? styles.darkTextSub : styles.lightTextSub]}>
+          {item.description}
+        </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={[styles.container, isDarkMode ? styles.darkContainer : styles.lightContainer]}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      
-      {/* 4. Навігаційні кнопки з індикатором активності (Пункт 4 завдання) */}
-      <View style={[styles.tabBar, isDarkMode ? styles.darkTabBar : styles.lightTabBar]}>
-        <TouchableOpacity 
-          style={[styles.tabButton, activeTab === 'list' && styles.activeTab]} 
-          onPress={() => setActiveTab('list')}
-        >
-          <Text style={[styles.tabText, activeTab === 'list' && styles.activeTabText]}>Тести</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.tabButton, activeTab === 'settings' && styles.activeTab]} 
-          onPress={() => setActiveTab('settings')}
-        >
-          <Text style={[styles.tabText, activeTab === 'settings' && styles.activeTabText]}>Налаштування</Text>
+      {/* 5. Перероблена навігація (Кастомне меню) */}
+      <View style={[styles.header, isDarkMode ? styles.darkTabBar : styles.lightTabBar]}>
+        <Text style={[styles.headerTitle, isDarkMode ? styles.darkText : styles.lightText]}>QuizApp</Text>
+        <TouchableOpacity style={styles.menuTrigger} onPress={() => setShowNavMenu(!showNavMenu)}>
+          <Text style={{color: '#007AFF', fontWeight: 'bold'}}>МЕНЮ ☰</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Основний контейнер для зміни контенту (Пункт 3) */}
+      {showNavMenu && (
+        <View style={[styles.dropdown, isDarkMode ? styles.darkCard : styles.lightCard]}>
+          {['list', 'settings', 'add'].map((tab) => (
+            <TouchableOpacity key={tab} style={styles.dropdownItem} onPress={() => { setActiveTab(tab); setShowNavMenu(false); }}>
+              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                {tab === 'list' ? '📚 Список' : tab === 'settings' ? '⚙️ Налаштування' : '➕ Додати новий'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <View style={styles.content}>
-        {activeTab === 'list' ? (
+        {/* Екран 1: Список */}
+        {activeTab === 'list' && (
           <FlatList
-            data={QUIZ_DATA}
+            data={quizzes}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <QuizItem title={item.title} desc={item.description} img={item.image} />
-            )}
-            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => <QuizItem item={item} />}
+            ListEmptyComponent={<Text style={styles.emptyText}>Список порожній</Text>}
           />
-        ) : (
+        )}
+
+        {/* Екран 2: Налаштування (Пункт 4: TextInput) */}
+        {activeTab === 'settings' && (
           <View style={styles.settingsScreen}>
             <Text style={[styles.settingsTitle, { fontSize: 26 * fontSizeMultiplier }, isDarkMode ? styles.darkText : styles.lightText]}>Налаштування</Text>
             
             <View style={[styles.settingRow, isDarkMode ? styles.darkCard : styles.lightCard]}>
-              <Text style={[styles.settingLabel, { fontSize: 18 * fontSizeMultiplier }, isDarkMode ? styles.darkText : styles.lightText]}>Нічний режим</Text>
-              <Switch 
-                value={isDarkMode} 
-                onValueChange={(value) => setIsDarkMode(value)} 
-                trackColor={{ false: "#cccccc", true: "#9c0303" }}
-                thumbColor={isDarkMode ? "#ffffff" : "#747171"}
-              />
+              <Text style={[styles.settingLabel, isDarkMode ? styles.darkText : styles.lightText]}>Нічний режим</Text>
+              <Switch value={isDarkMode} onValueChange={setIsDarkMode} />
             </View>
 
-            <View style={[styles.settingRow, isDarkMode ? styles.darkCard : styles.lightCard, { marginTop: 15 }]}>
-              <Text style={[styles.settingLabel, { fontSize: 18 * fontSizeMultiplier }, isDarkMode ? styles.darkText : styles.lightText]}>Розмір шрифту</Text>
-              <View style={styles.fontSizeButtons}>
-                <TouchableOpacity 
-                  style={[styles.fontButton, fontSizeMultiplier === 0.85 && styles.fontButtonActive]}
-                  onPress={() => setFontSizeMultiplier(0.85)}
-                >
-                  <Text style={[styles.fontButtonText, fontSizeMultiplier === 0.85 && styles.fontButtonTextActive]}>A</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.fontButton, fontSizeMultiplier === 1 && styles.fontButtonActive]}
-                  onPress={() => setFontSizeMultiplier(1)}
-                >
-                  <Text style={[styles.fontButtonText, { fontSize: 18 }, fontSizeMultiplier === 1 && styles.fontButtonTextActive]}>A</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.fontButton, fontSizeMultiplier === 1.15 && styles.fontButtonActive]}
-                  onPress={() => setFontSizeMultiplier(1.15)}
-                >
-                  <Text style={[styles.fontButtonText, { fontSize: 22 }, fontSizeMultiplier === 1.15 && styles.fontButtonTextActive]}>A</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={[styles.settingRow, isDarkMode ? styles.darkCard : styles.lightCard, {marginTop: 15}]}>
+              <Text style={[styles.settingLabel, isDarkMode ? styles.darkText : styles.lightText]}>Ім'я профілю</Text>
+              <TextInput 
+                style={[styles.input, {borderColor: isDarkMode ? '#444' : '#ddd', color: isDarkMode ? '#fff' : '#000'}]} 
+                placeholder="Введіть нікнейм..."
+                placeholderTextColor="#888"
+              />
             </View>
           </View>
         )}
+
+        {/* Екран 3: Додавання (Пункт 2) */}
+        {activeTab === 'add' && (
+          <View style={styles.settingsScreen}>
+            <Text style={[styles.settingsTitle, isDarkMode ? styles.darkText : styles.lightText]}>Новий елемент</Text>
+            <TextInput 
+              style={[styles.input, isDarkMode ? styles.darkInput : styles.lightInput]} 
+              placeholder="Назва квізу"
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholderTextColor="#888"
+            />
+            <TextInput 
+              style={[styles.input, isDarkMode ? styles.darkInput : styles.lightInput]} 
+              placeholder="Опис"
+              value={newDesc}
+              onChangeText={setNewDesc}
+              placeholderTextColor="#888"
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addItem}>
+              <Text style={styles.addButtonText}>Зберегти</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
+
+      {/* 6. Модальне вікно деталей */}
+      <Modal visible={detailModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, isDarkMode ? styles.darkCard : styles.lightCard]}>
+            {selectedItem && (
+              <>
+                <Text style={[styles.modalTitle, isDarkMode ? styles.darkText : styles.lightText]}>{selectedItem.title}</Text>
+                <Text style={[styles.modalDetails, isDarkMode ? styles.darkTextSub : styles.lightTextSub]}>{selectedItem.details}</Text>
+                
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={styles.closeButton} onPress={() => setDetailModalVisible(false)}>
+                    <Text style={{color: '#fff'}}>Закрити</Text>
+                  </TouchableOpacity>
+                  {/* 3. Можливість видаляти (Пункт 3) */}
+                  <TouchableOpacity style={styles.deleteButton} onPress={() => deleteItem(selectedItem.id)}>
+                    <Text style={{color: '#fff'}}>Видалити</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -108,54 +180,46 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   lightContainer: { backgroundColor: '#ecf7ff' },
   darkContainer: { backgroundColor: '#121212' },
-  
   content: { flex: 1, paddingHorizontal: 15 },
-
-  tabBar: { flexDirection: 'row', elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
-  lightTabBar: { backgroundColor: '#ffffff' },
-  darkTabBar: { backgroundColor: '#1e1e1e' },
   
-  tabButton: { flex: 1, paddingVertical: 18, alignItems: 'center' },
-  activeTab: { borderBottomWidth: 4, borderBottomColor: '#007AFF' }, // Індикатор активного екрану
-  tabText: { color: '#8e8e93', fontWeight: 'bold', fontSize: 16 },
-  activeTabText: { color: '#007AFF' },
-
-  card: { 
-    flexDirection: 'row', 
-    marginVertical: 8, 
-    borderRadius: 15, 
-    padding: 12,
-    alignItems: 'center',
-    elevation: 3,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-  },
+  // Header & Dropdown
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, alignItems: 'center', elevation: 4 },
+  headerTitle: { fontSize: 20, fontWeight: 'bold' },
+  dropdown: { position: 'absolute', top: 60, right: 15, zIndex: 1000, width: 200, borderRadius: 10, elevation: 10, padding: 10 },
+  dropdownItem: { paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#ccc' },
+  
+  // Cards
+  card: { flexDirection: 'row', marginVertical: 8, borderRadius: 15, padding: 12, alignItems: 'center', elevation: 3 },
   lightCard: { backgroundColor: '#fff' },
   darkCard: { backgroundColor: '#2c2c2e' },
-  
-  cardImage: { width: 65, height: 65, borderRadius: 12 },
+  cardImage: { width: 60, height: 60, borderRadius: 10 },
   cardContent: { marginLeft: 15, flex: 1 },
-  cardTitle: { fontSize: 17, fontWeight: '700', marginBottom: 4 },
-  
+  cardTitle: { fontWeight: '700' },
   lightText: { color: '#000' },
   darkText: { color: '#fff' },
-  lightTextSub: { color: '#636366', fontSize: 14 },
-  darkTextSub: { color: '#aeaeb2', fontSize: 14 },
+  lightTextSub: { color: '#666' },
+  darkTextSub: { color: '#aaa' },
 
-  settingsScreen: { flex: 1, paddingTop: 40 },
-  settingsTitle: { fontSize: 26, fontWeight: '800', marginBottom: 30, textAlign: 'left' },
-  settingRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 20, 
-    borderRadius: 18, 
-    justifyContent: 'space-between' 
-  },
-  settingLabel: { fontSize: 18, fontWeight: '500' },
-  
-  fontSizeButtons: { flexDirection: 'row', gap: 10 },
-  fontButton: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 2, borderColor: '#d0d0d0' },
-  fontButtonActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-  fontButtonText: { fontSize: 14, color: '#666', fontWeight: '600' },
-  fontButtonTextActive: { color: '#fff' }
+  // Inputs & Buttons
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 15, fontSize: 16 },
+  lightInput: { borderColor: '#ddd', backgroundColor: '#fff' },
+  darkInput: { borderColor: '#444', backgroundColor: '#1e1e1e', color: '#fff' },
+  addButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center' },
+  addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { borderRadius: 20, padding: 25, alignItems: 'center' },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
+  modalDetails: { fontSize: 16, textAlign: 'center', marginBottom: 20 },
+  modalButtons: { flexDirection: 'row', gap: 15 },
+  closeButton: { backgroundColor: '#888', padding: 12, borderRadius: 10 },
+  deleteButton: { backgroundColor: '#ff3b30', padding: 12, borderRadius: 10 },
+
+  settingsScreen: { flex: 1, paddingTop: 20 },
+  settingsTitle: { fontSize: 26, fontWeight: '800', marginBottom: 20 },
+  settingRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, justifyContent: 'space-between' },
+  tabText: { fontSize: 16, color: '#555' },
+  activeTabText: { color: '#007AFF', fontWeight: 'bold' },
+  emptyText: { textAlign: 'center', marginTop: 50, color: '#888' }
 });
