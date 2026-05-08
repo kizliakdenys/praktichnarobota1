@@ -1,221 +1,278 @@
 import React, { useState, createContext, useContext } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity, FlatList, Image, 
-  Switch, StatusBar, SafeAreaView, Modal, TextInput, Alert 
+  StatusBar, SafeAreaView, Modal, TextInput, Alert, ScrollView, ActivityIndicator 
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import axios from 'axios';
+import * as Calendar from 'expo-calendar';
+import * as ImagePicker from 'expo-image-picker';
 
-// --- КОНТЕКСТ ТА ДАНІ ---
-
+const queryClient = new QueryClient();
 const AuthContext = createContext();
-
-const USERS = [
-  { id: '1', username: 'admin', password: '123', name: 'Олександр (Admin)' },
-  { id: '2', username: 'user', password: 'password', name: 'Іван Користувач' }
-];
-
-const INITIAL_DATA = Array.from({ length: 5 }, (_, i) => ({
-  id: Date.now().toString() + i,
-  title: `Командний квіз №${i + 1}`,
-  description: 'Натисніть, щоб розпочати тестування',
-  details: 'Детальна інформація про правила квізу та час проходження.',
-  image: `https://picsum.photos/200?random=${i}`, 
-}));
 
 // --- ЕКРАНИ ---
 
-// 3. Екран авторизації (Пункт 3)
 const LoginScreen = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('eve.holt@reqres.in'); 
+  const [password, setPassword] = useState('cityslicka');
+  const [loading, setLoading] = useState(false);
   const { signIn } = useContext(AuthContext);
 
-  const handleLogin = () => {
-    const user = USERS.find(u => u.username === username && u.password === password);
-    if (user) {
-      signIn(user);
-    } else {
-      Alert.alert("Помилка", "Невірний логін або пароль");
+  const handleLogin = async () => {
+    setLoading(true);
+    try {
+      // Спроба входу через реальний API
+      const response = await axios.post('https://reqres.in/api/login', { 
+        email: email.trim(), 
+        password: password.trim() 
+      });
+      
+      if (response.data.token) {
+        signIn({ email, token: response.data.token });
+      }
+    } catch (error) {
+      console.log("API Error:", error);
+      
+      // ЗАПАСНИЙ ВАРІАНТ: якщо API лежить або помилка, 
+      // але пароль "123" або "cityslicka" — пускаємо локально
+      if (password === 'cityslicka' || password === '123') {
+        Alert.alert("API Offline", "Увійшли через локальний режим (запасний)");
+        signIn({ email, token: 'local-fake-token' });
+      } else {
+        Alert.alert("Помилка", "Невірні дані або немає інтернету");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <View style={styles.authContainer}>
-      <Text style={styles.authTitle}>Вхід у QuizApp</Text>
+      <Text style={styles.authTitle}>QuizApp API Login</Text>
       <TextInput 
         style={styles.input} 
-        placeholder="Логін (admin)" 
-        value={username}
-        onChangeText={setUsername}
+        placeholder="Email" 
+        value={email} 
+        onChangeText={setEmail} 
+        autoCapitalize="none" 
       />
       <TextInput 
         style={styles.input} 
-        placeholder="Пароль (123)" 
+        placeholder="Password" 
         secureTextEntry 
-        value={password}
-        onChangeText={setPassword}
+        value={password} 
+        onChangeText={setPassword} 
       />
-      <TouchableOpacity style={styles.addButton} onPress={handleLogin}>
-        <Text style={styles.addButtonText}>Увійти</Text>
+      <TouchableOpacity 
+        style={[styles.addButton, { backgroundColor: loading ? '#ccc' : '#007AFF' }]} 
+        onPress={handleLogin} 
+        disabled={loading}
+      >
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.addButtonText}>Увійти через API</Text>}
       </TouchableOpacity>
+      <Text style={{ textAlign: 'center', marginTop: 15, color: '#888' }}>
+        Пароль для входу: cityslicka або 123
+      </Text>
     </View>
   );
 };
 
-// Екран списку (Екран 1)
-const ListScreen = () => {
-  const [quizzes, setQuizzes] = useState(INITIAL_DATA);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
+const PostsScreen = () => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const res = await axios.get('https://jsonplaceholder.typicode.com/posts?_limit=10');
+      return res.data;
+    }
+  });
 
-  const deleteItem = (id) => {
-    setQuizzes(quizzes.filter(item => item.id !== id));
-    setModalVisible(false);
-  };
+  if (isLoading) return <ActivityIndicator style={styles.centerText} size="large" />;
+  if (error) return <Text style={styles.centerText}>Помилка завантаження даних</Text>;
 
   return (
-    <SafeAreaView style={styles.content}>
+    <View style={styles.content}>
       <FlatList
-        data={quizzes}
-        keyExtractor={(item) => item.id}
+        data={data}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => { setSelectedItem(item); setModalVisible(true); }}>
-            <Image source={{ uri: item.image }} style={styles.cardImage} />
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>{item.title}</Text>
-              <Text style={styles.lightTextSub}>{item.description}</Text>
-            </View>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{item.title}</Text>
+            <Text style={styles.lightTextSub}>{item.body}</Text>
+          </View>
+        )}
+      />
+    </View>
+  );
+};
+
+const ListScreen = ({ navigation }) => {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  const items = [
+    { id: '1', title: 'React Native Експерт', details: 'Поглиблений курс по API та нативним модулям. Натисніть "Детальніше", щоб додати подію в календар або прикріпити фото.' }
+  ];
+
+  return (
+    <View style={styles.content}>
+      <FlatList
+        data={items}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.card} onPress={() => { setSelected(item); setModalVisible(true); }}>
+            <Text style={styles.cardTitle}>{item.title}</Text>
+            <Text style={styles.lightTextSub}>Натисніть для перегляду деталей</Text>
           </TouchableOpacity>
         )}
       />
-      <Modal visible={modalVisible} animationType="slide" transparent={true}>
+      <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {selectedItem && (
-              <>
-                <Text style={styles.modalTitle}>{selectedItem.title}</Text>
-                <Text style={styles.modalDetails}>{selectedItem.details}</Text>
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
-                    <Text style={{color: '#fff'}}>Закрити</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.deleteButton} onPress={() => deleteItem(selectedItem.id)}>
-                    <Text style={{color: '#fff'}}>Видалити</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+            <Text style={styles.modalTitle}>{selected?.title}</Text>
+            <TouchableOpacity 
+              style={styles.addButton} 
+              onPress={() => { setModalVisible(false); navigation.navigate('Details', { item: selected }); }}
+            >
+              <Text style={styles.addButtonText}>Детальніше</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={{marginTop: 15}}><Text style={{color: '#007AFF'}}>Закрити</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-  );
-};
-
-// Екран додавання (Екран 3)
-const AddScreen = ({ navigation }) => {
-  const [title, setTitle] = useState('');
-  return (
-    <View style={styles.settingsScreen}>
-      <Text style={styles.settingsTitle}>Новий елемент</Text>
-      <TextInput style={styles.input} placeholder="Назва" value={title} onChangeText={setTitle} />
-      <TouchableOpacity style={styles.addButton} onPress={() => { Alert.alert("Успіх", "Додано!"); navigation.navigate('Список'); }}>
-        <Text style={styles.addButtonText}>Зберегти</Text>
-      </TouchableOpacity>
     </View>
   );
 };
 
-// Екран налаштувань (Пункт 6)
-const SettingsScreen = () => {
-  const { user, signOut } = useContext(AuthContext);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+const DetailsScreen = ({ route }) => {
+  const { item } = route.params;
+  const [image, setImage] = useState(null);
+
+  const addToCalendar = async () => {
+    const { status } = await Calendar.requestCalendarPermissionsAsync();
+    if (status === 'granted') {
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const defaultCalendar = calendars.find(c => c.allowsModifications) || calendars[0];
+      
+      try {
+        await Calendar.createEventAsync(defaultCalendar.id, {
+          title: `Квіз: ${item.title}`,
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 3600000),
+          timeZone: 'GMT+3',
+        });
+        Alert.alert("Успіх", "Подію додано!");
+      } catch (e) {
+        Alert.alert("Помилка", "Не вдалося додати подію.");
+      }
+    } else {
+      Alert.alert("Доступ заборонено", "Надайте дозвіл календарю в налаштуваннях.");
+    }
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled) setImage(result.assets[0].uri);
+  };
 
   return (
-    <View style={styles.settingsScreen}>
-      <Text style={styles.settingsTitle}>Налаштування</Text>
-      <View style={styles.settingRow}>
-        <Text style={styles.settingLabel}>Користувач: {user?.name}</Text>
-      </View>
-      <View style={styles.settingRow}>
-        <Text style={styles.settingLabel}>Нічний режим</Text>
-        <Switch value={isDarkMode} onValueChange={setIsDarkMode} />
-      </View>
-      <TouchableOpacity style={[styles.deleteButton, {marginTop: 20}]} onPress={signOut}>
-        <Text style={{color: '#fff', fontWeight: 'bold'}}>Вийти з акаунту</Text>
+    <ScrollView contentContainerStyle={styles.settingsScreen}>
+      <Text style={styles.settingsTitle}>{item.title}</Text>
+      <Text style={styles.modalDetails}>{item.details}</Text>
+      
+      <TouchableOpacity style={[styles.addButton, {backgroundColor: '#34C759', width: '100%'}]} onPress={addToCalendar}>
+        <Text style={styles.addButtonText}>📅 Нагадати в календарі</Text>
       </TouchableOpacity>
-    </View>
+
+      <TouchableOpacity style={[styles.addButton, {marginTop: 10, backgroundColor: '#5856D6', width: '100%'}]} onPress={pickImage}>
+        <Text style={styles.addButtonText}>🖼️ Прикріпити зображення</Text>
+      </TouchableOpacity>
+
+      {image && (
+        <View style={{alignItems: 'center'}}>
+          <Image source={{ uri: image }} style={styles.selectedImage} />
+          <TouchableOpacity onPress={() => setImage(null)}><Text style={{color: 'red', marginTop: 10}}>Видалити фото</Text></TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
   );
 };
 
-// --- НАВІГАТОРИ ---
+// --- НАВІГАЦІЯ ТА КОНТЕКСТ ---
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// 4. Tab Navigator після авторизації
 const MainTabs = () => (
-  <Tab.Navigator screenOptions={{ 
-    tabBarActiveTintColor: '#007AFF',
-    headerStyle: { backgroundColor: '#fff' },
-  }}>
-    <Tab.Screen name="Список" component={ListScreen} options={{ tabBarLabel: '📚 Тести' }} />
-    <Tab.Screen name="Додати" component={AddScreen} options={{ tabBarLabel: '➕ Створити' }} />
-    <Tab.Screen name="Профіль" component={SettingsScreen} options={{ tabBarLabel: '⚙️ Налаштування' }} />
+  <Tab.Navigator screenOptions={{ tabBarActiveTintColor: '#007AFF' }}>
+    <Tab.Screen name="Квізи" component={ListScreen} />
+    <Tab.Screen name="API Пости" component={PostsScreen} />
+    <Tab.Screen name="Профіль" component={SettingsScreen} />
   </Tab.Navigator>
 );
+
+const SettingsScreen = () => {
+  const { user, signOut } = useContext(AuthContext);
+  return (
+    <View style={styles.center}>
+      <Text style={{fontSize: 18}}>Ви увійшли як:</Text>
+      <Text style={{fontWeight: 'bold', marginBottom: 20}}>{user?.email}</Text>
+      <TouchableOpacity style={styles.deleteButton} onPress={signOut}>
+        <Text style={{color:'#fff', fontWeight: 'bold'}}>Вийти з акаунту</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
 
-  const authContext = {
-    user,
-    signIn: (userData) => setUser(userData),
-    signOut: () => setUser(null),
-  };
-
   return (
-    <AuthContext.Provider value={authContext}>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {user == null ? (
-            // 3. Екран авторизації першим
-            <Stack.Screen name="Login" component={LoginScreen} />
-          ) : (
-            // 4. Основна навігація після входу
-            <Stack.Screen name="Home" component={MainTabs} />
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
-    </AuthContext.Provider>
+    <QueryClientProvider client={queryClient}>
+      <AuthContext.Provider value={{ user, signIn: (u) => setUser(u), signOut: () => setUser(null) }}>
+        <NavigationContainer>
+          <StatusBar barStyle="dark-content" />
+          <Stack.Navigator>
+            {user == null ? (
+              <Stack.Screen name="Login" component={LoginScreen} options={{headerShown: false}} />
+            ) : (
+              <>
+                <Stack.Screen name="Home" component={MainTabs} options={{headerShown: false}} />
+                <Stack.Screen name="Details" component={DetailsScreen} options={{title: 'Деталі ресурсу'}} />
+              </>
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </AuthContext.Provider>
+    </QueryClientProvider>
   );
 }
 
 // --- СТИЛІ ---
-
 const styles = StyleSheet.create({
-  authContainer: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#ecf7ff' },
-  authTitle: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 30, color: '#007AFF' },
-  content: { flex: 1, paddingHorizontal: 15 },
-  card: { flexDirection: 'row', marginVertical: 8, borderRadius: 15, padding: 12, alignItems: 'center', backgroundColor: '#fff', elevation: 3 },
-  cardImage: { width: 60, height: 60, borderRadius: 10 },
-  cardContent: { marginLeft: 15, flex: 1 },
-  cardTitle: { fontWeight: '700', fontSize: 16 },
-  lightTextSub: { color: '#666' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, marginBottom: 15, backgroundColor: '#fff' },
-  addButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center' },
+  authContainer: { flex: 1, justifyContent: 'center', padding: 30, backgroundColor: '#f0f8ff' },
+  authTitle: { fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 30, color: '#007AFF' },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, marginBottom: 15, backgroundColor: '#fff' },
+  addButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center', minWidth: 150 },
   addButtonText: { color: '#fff', fontWeight: 'bold' },
-  settingsScreen: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' },
-  settingsTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#fff', borderRadius: 10, marginBottom: 10 },
-  settingLabel: { fontSize: 16 },
+  content: { flex: 1, padding: 15, backgroundColor: '#f9f9f9' },
+  card: { backgroundColor: '#fff', padding: 20, borderRadius: 15, marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  lightTextSub: { color: '#666', lineHeight: 20 },
+  centerText: { textAlign: 'center', marginTop: 50 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#fff', borderRadius: 20, padding: 25, alignItems: 'center' },
-  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
-  modalDetails: { textAlign: 'center', marginBottom: 20 },
-  modalButtons: { flexDirection: 'row', gap: 15 },
-  closeButton: { backgroundColor: '#888', padding: 12, borderRadius: 10 },
-  deleteButton: { backgroundColor: '#ff3b30', padding: 12, borderRadius: 10, alignItems: 'center' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  settingsScreen: { padding: 20, alignItems: 'center', backgroundColor: '#fff', flexGrow: 1 },
+  settingsTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  modalDetails: { textAlign: 'center', marginBottom: 25, color: '#444', fontSize: 16, lineHeight: 24 },
+  selectedImage: { width: 300, height: 300, borderRadius: 15, marginTop: 20 },
+  deleteButton: { backgroundColor: '#FF3B30', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 10 }
 });
